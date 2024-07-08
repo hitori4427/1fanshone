@@ -1,0 +1,186 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>刮刮樂</title>
+    <style>
+        body {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            margin: 0;
+            background-color: #f0f0f0;
+            font-family: Arial, sans-serif;
+        }
+        #scratchCard {
+            position: relative;
+            width: 300px;
+            height: 150px;
+            cursor: pointer;
+            touch-action: none;
+        }
+        #prize {
+            position: absolute;
+            width: 100%;
+            height: 100%;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            font-size: 24px;
+            background-color: #fff;
+            border: 2px solid #ccc;
+        }
+        #scratchLayer {
+            position: absolute;
+            width: 100%;
+            height: 100%;
+            top: 0;
+            left: 0;
+        }
+        #message {
+            text-align: center;
+            margin-top: 20px;
+            font-size: 18px;
+            color: #333;
+        }
+    </style>
+</head>
+<body>
+    <div>
+        <div id="scratchCard">
+            <div id="prize"></div>
+            <canvas id="scratchLayer"></canvas>
+        </div>
+        <div id="message"></div>
+    </div>
+
+    <script>
+        const prizes = [
+            { name: 'iPhone 14', probability: 0.01 },
+            { name: '100元優惠券', probability: 0.1 },
+            { name: '50元優惠券', probability: 0.2 },
+            { name: '10元優惠券', probability: 0.3 },
+            { name: '再接再厲', probability: 0.39 }
+        ];
+
+        function getRandomPrize() {
+            const rand = Math.random();
+            let cumulativeProbability = 0;
+            for (let prize of prizes) {
+                cumulativeProbability += prize.probability;
+                if (rand < cumulativeProbability) {
+                    return prize.name;
+                }
+            }
+            return prizes[prizes.length - 1].name;
+        }
+
+        function initScratchCard() {
+            const canvas = document.getElementById('scratchLayer');
+            const ctx = canvas.getContext('2d');
+            const prizeElement = document.getElementById('prize');
+            const messageElement = document.getElementById('message');
+
+            if (!canvas || !ctx || !prizeElement || !messageElement) {
+                console.error('無法找到必要的DOM元素');
+                return;
+            }
+
+            try {
+                if (localStorage.getItem('scratchCardUsed')) {
+                    messageElement.textContent = '您已經參與過抽獎了，謝謝！';
+                    prizeElement.textContent = '已使用';
+                    return;
+                }
+            } catch (e) {
+                console.error('無法訪問localStorage:', e);
+            }
+
+            function setCanvasSize() {
+                const rect = canvas.getBoundingClientRect();
+                canvas.width = rect.width;
+                canvas.height = rect.height;
+                ctx.fillStyle = 'silver';
+                ctx.fillRect(0, 0, canvas.width, canvas.height);
+            }
+
+            setCanvasSize();
+            window.addEventListener('resize', setCanvasSize);
+
+            const randomPrize = getRandomPrize();
+            prizeElement.textContent = randomPrize;
+
+            let isDrawing = false;
+            let lastX = 0;
+            let lastY = 0;
+
+            function getPosition(e) {
+                const rect = canvas.getBoundingClientRect();
+                const x = (e.clientX || (e.touches && e.touches[0].clientX)) - rect.left;
+                const y = (e.clientY || (e.touches && e.touches[0].clientY)) - rect.top;
+                return [x, y];
+            }
+
+            function startDrawing(e) {
+                isDrawing = true;
+                [lastX, lastY] = getPosition(e);
+            }
+
+            function draw(e) {
+                if (!isDrawing) return;
+                e.preventDefault();
+
+                const [x, y] = getPosition(e);
+
+                ctx.globalCompositeOperation = 'destination-out';
+                ctx.beginPath();
+                ctx.moveTo(lastX, lastY);
+                ctx.lineTo(x, y);
+                ctx.lineWidth = 40;
+                ctx.lineCap = 'round';
+                ctx.stroke();
+
+                lastX = x;
+                lastY = y;
+
+                if (getRevealedPercentage() > 50) {
+                    messageElement.textContent = `恭喜您獲得：${randomPrize}`;
+                    try {
+                        localStorage.setItem('scratchCardUsed', 'true');
+                    } catch (e) {
+                        console.error('無法設置localStorage:', e);
+                    }
+                }
+            }
+
+            function stopDrawing() {
+                isDrawing = false;
+            }
+
+            function getRevealedPercentage() {
+                const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+                const pixelData = imageData.data;
+                let transparentPixels = 0;
+                for (let i = 3; i < pixelData.length; i += 4) {
+                    if (pixelData[i] === 0) transparentPixels++;
+                }
+                return (transparentPixels / (canvas.width * canvas.height)) * 100;
+            }
+
+            canvas.addEventListener('mousedown', startDrawing);
+            canvas.addEventListener('mousemove', draw);
+            canvas.addEventListener('mouseup', stopDrawing);
+            canvas.addEventListener('mouseout', stopDrawing);
+
+            canvas.addEventListener('touchstart', startDrawing);
+            canvas.addEventListener('touchmove', draw);
+            canvas.addEventListener('touchend', stopDrawing);
+        }
+
+        // 等待 DOM 加載完成後再初始化
+        document.addEventListener('DOMContentLoaded', initScratchCard);
+    </script>
+</body>
+</html>
